@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Motion Lab — extravagant-web-motion</title>
+<!--
+  MOTION INVENTORY — the lab's own animations (it obeys the skill it audits)
+  element        | trigger      | property        | duration | easing
+  ---------------|--------------|-----------------|----------|--------------------------
+  .rail a        | hover/active | opacity         | 200ms    | cubic-bezier(.16,1,.3,1)
+  .status        | state change | opacity         | 200ms    | cubic-bezier(.16,1,.3,1)
+  Viewport preset changes set width directly: no layout property is ever transitioned.
+  DEGRADATION — reduced motion: no transitions at all; the audit table stays fully readable.
+-->
+<style>
+  :root{
+    --bg:#0a0a0b; --surface:#141416; --fg:#f5f3ef; --dim:#8b8b87; --line:#26262a;
+    --accent:#d7ff3e;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --ease-in:cubic-bezier(.33,0,.2,1);
+    --dur-micro:200ms; --dur-enter:600ms; --dur-hero:1000ms;
+    --gutter:clamp(20px,4vw,64px);
+    --font-display:Georgia,"Times New Roman",serif;
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --ok:#8bd450; --warn:#e8b33c; --bad:#ff6e5a; --manual:#7aa7ff;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg); font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  h1,h2,h3,p,ul{margin:0}
+  .label{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--dim);
+  }
+  code{font-family:var(--font-mono); font-size:.92em; color:var(--fg)}
+
+  .app{display:grid; grid-template-columns:264px 1fr; height:100svh}
+
+  /* ---------- rail ---------- */
+  .rail{
+    border-right:1px solid var(--line); display:flex; flex-direction:column;
+    min-height:0;
+  }
+  .rail-head{padding:16px; border-bottom:1px solid var(--line); display:grid; gap:8px}
+  .rail-head h1{font-family:var(--font-display); font-weight:400; font-size:1.05rem; letter-spacing:-.01em}
+  .env{display:grid; gap:2px}
+  .env span{font-family:var(--font-mono); font-size:10px; letter-spacing:.04em; color:var(--dim)}
+  .env b{font-weight:400}
+  .env .on{color:var(--accent)}
+  .env .off{color:var(--dim)}
+
+  .list{list-style:none; margin:0; padding:6px; overflow:auto; flex:1; min-height:0}
+  .list a{
+    display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center;
+    padding:9px 10px; text-decoration:none; color:var(--fg); border-radius:2px;
+    border:1px solid transparent; opacity:.72;
+    transition:opacity var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+  }
+  .list a:hover,.list a:focus-visible{opacity:1; border-color:var(--line); outline:none}
+  .list a[aria-current="true"]{opacity:1; border-color:var(--accent)}
+  .list a .n{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:.06em; color:var(--dim);
+    grid-column:1 / -1;
+  }
+  .list a .t{font-size:13px}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--line); display:inline-block}
+  .dot[data-s="pass"]{background:var(--ok)}
+  .dot[data-s="warn"]{background:var(--warn)}
+  .dot[data-s="fail"]{background:var(--bad)}
+
+  .rail-foot{padding:12px; border-top:1px solid var(--line); display:grid; gap:8px}
+  button{
+    background:none; color:var(--fg); border:1px solid var(--line); border-radius:2px;
+    font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+    padding:8px 10px; cursor:pointer;
+    transition:border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), opacity var(--dur-micro) var(--ease-out);
+  }
+  button:hover,button:focus-visible{border-color:var(--accent); color:var(--accent); outline:none}
+  button[aria-pressed="true"]{border-color:var(--accent); color:var(--accent)}
+  button[disabled]{opacity:.4; cursor:not-allowed}
+
+  /* ---------- main ---------- */
+  .main{display:grid; grid-template-rows:auto auto 1fr; min-height:0; min-width:0}
+  .toolbar{
+    display:flex; justify-content:space-between; align-items:center; gap:16px;
+    padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  .toolbar .title{display:grid; gap:2px}
+  .toolbar .title strong{font-family:var(--font-display); font-weight:400; font-size:1rem}
+  .toolbar .title span{font-family:var(--font-mono); font-size:10px; letter-spacing:.06em; color:var(--dim); text-transform:uppercase}
+  .vp{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .vp .w{font-family:var(--font-mono); font-size:10px; color:var(--dim); min-width:56px; text-align:right}
+  a.plain{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--dim); text-decoration:none; border-bottom:1px solid var(--line); padding-bottom:1px;
+    margin-left:10px;
+    transition:color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+  }
+  a.plain:hover,a.plain:focus-visible{color:var(--accent); border-color:var(--accent); outline:none}
+
+  .stage-wrap{
+    padding:12px 16px; border-bottom:1px solid var(--line);
+    display:grid; place-items:center; background:#07070880;
+  }
+  .stage{
+    width:100%; height:54svh; border:1px solid var(--line); overflow:hidden; background:var(--bg);
+    position:relative;
+  }
+  .stage iframe{width:100%; height:100%; border:0; display:block}
+  .stage-veil{
+    position:absolute; inset:0; display:grid; place-items:center; background:rgba(10,10,11,.72);
+    opacity:1; pointer-events:none; transition:opacity var(--dur-micro) var(--ease-out);
+  }
+  .stage-veil[hidden]{display:grid; opacity:0}
+
+  /* ---------- audit ---------- */
+  .audit{overflow:auto; padding:16px; display:grid; gap:16px; align-content:start; min-height:0}
+  .summary{display:flex; gap:16px; align-items:center; flex-wrap:wrap}
+  .score{
+    font-family:var(--font-display); font-size:2rem; line-height:1; min-width:3ch;
+  }
+  .bars{display:flex; gap:10px; flex-wrap:wrap}
+  .bar{display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em}
+
+  table{width:100%; border-collapse:collapse; font-size:12.5px}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); font-weight:400}
+  td.ev{font-family:var(--font-mono); font-size:11px; color:var(--dim); word-break:break-word}
+  .tag{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+    padding:2px 6px; border:1px solid currentColor; border-radius:2px; white-space:nowrap;
+  }
+  .tag[data-s="pass"]{color:var(--ok)} .tag[data-s="fail"]{color:var(--bad)}
+  .tag[data-s="warn"]{color:var(--warn)} .tag[data-s="manual"]{color:var(--manual)}
+  .tag[data-s="info"]{color:var(--dim)}
+  .dot[data-s="info"]{background:var(--dim)}
+
+  .fp-head{display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap}
+  .fp-head h2{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); font-weight:400}
+
+  .panel{border:1px solid var(--line); padding:12px; display:grid; gap:10px}
+  .panel h2{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); font-weight:400}
+  pre{
+    margin:0; font-family:var(--font-mono); font-size:10.5px; line-height:1.45; color:var(--dim);
+    white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto;
+  }
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media (max-width:1080px){ .two{grid-template-columns:1fr} .app{grid-template-columns:220px 1fr} }
+  @media (max-width:760px){
+    body{overflow:auto}
+    .app{grid-template-columns:1fr; height:auto}
+    .rail{border-right:0; border-bottom:1px solid var(--line)}
+    .list{max-height:220px}
+    .stage{height:60svh}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{
+      transition-duration:.01ms !important; animation-duration:.01ms !important;
+      animation-iteration-count:1 !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="rail">
+    <div class="rail-head">
+      <h1>Motion Lab</h1>
+      <span class="label">extravagant-web-motion</span>
+      <div class="env" data-env></div>
+    </div>
+
+    <ul class="list" data-list></ul>
+
+    <div class="rail-foot">
+      <button type="button" data-audit-all>Audit all 7</button>
+      <span class="label" data-progress>idle</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <div class="title">
+        <strong data-title>—</strong>
+        <span data-subtitle>—</span>
+      </div>
+      <div class="vp">
+        <button type="button" data-vp="desktop" aria-pressed="true">Desktop</button>
+        <button type="button" data-vp="tablet" aria-pressed="false">Tablet</button>
+        <button type="button" data-vp="mobile" aria-pressed="false">Mobile</button>
+        <span class="w" data-vpwidth>—</span>
+        <a class="plain" data-open href="#" target="_blank" rel="noopener">Standalone ↗</a>
+      </div>
+    </div>
+
+    <div class="stage-wrap">
+      <div class="stage" data-stage>
+        <iframe data-frame title="Pattern preview" loading="eager"></iframe>
+        <div class="stage-veil" data-veil><span class="label">cargando…</span></div>
+      </div>
+    </div>
+
+    <div class="audit">
+      <div class="summary">
+        <span class="score" data-score>—</span>
+        <div class="bars" data-bars></div>
+        <span class="label" data-verdict></span>
+      </div>
+
+      <table>
+        <thead><tr><th style="width:46%">Contract check</th><th style="width:12%">Status</th><th>Evidence</th></tr></thead>
+        <tbody data-checks></tbody>
+      </table>
+
+      <div class="fp-head">
+        <h2>Fingerprints — one site's decision, not a rule</h2>
+        <span class="label" data-fpcount>—</span>
+      </div>
+      <table>
+        <thead><tr><th style="width:38%">Observed in this asset</th><th>Why it is not a rule</th></tr></thead>
+        <tbody data-fps></tbody>
+      </table>
+
+      <div class="two">
+        <div class="panel">
+          <h2>Declared motion inventory</h2>
+          <pre data-inventory>—</pre>
+        </div>
+        <div class="panel">
+          <h2>Runtime state inside the frame</h2>
+          <pre data-runtime>—</pre>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var ASSETS = 'assets/';   // served by serve.mjs, mounted from the skill's asset directory
+
+  var PATTERNS = [
+    { id: '01-scroll-narrative', title: 'Scroll narrative', tier: 2, expects: { cls: 'lenis', why: 'Lenis accelerate loop' } },
+    { id: '02-morph-carousel',   title: 'Fullscreen morph', tier: 3, expects: { cls: 'immersive', why: 'fine-pointer gate' } },
+    { id: '03-expandable-nav',   title: 'Expandable nav',   tier: 1, expects: { cls: 'nav-open', why: 'overlay opened by interaction', interactive: true } },
+    { id: '04-page-transition',  title: 'Page transition',  tier: 2, expects: { cls: 'js-single', why: 'single-view mode' } },
+    { id: '05-kinetic-type',     title: 'Kinetic type',     tier: 2, expects: { cls: 'is-motion', why: 'split animation armed' } },
+    { id: '06-video-pipeline',   title: 'Video pipeline',   tier: 4, expects: { cls: 'is-calm', why: 'playback armed' } },
+    { id: '07-magnetic-cursor',  title: 'Magnetic cursor',  tier: 3, expects: { cls: 'has-cursor', why: 'fine-pointer gate' } }
+  ];
+
+  // The contract allowlist: what may be animated, and what never may.
+  var ALLOWED = ['transform', 'opacity', 'clip-path', 'clipPath', 'translate', 'scale', 'rotate', 'none', 'all', ''];
+  var LAYOUTISH = /^(width|height|top|left|right|bottom|inset|margin|padding|box-shadow|filter|font-size|line-height|letter-spacing|flex|grid)/i;
+
+  var frame = document.querySelector('[data-frame]');
+  var veil = document.querySelector('[data-veil]');
+  var listEl = document.querySelector('[data-list]');
+  var titleEl = document.querySelector('[data-title]');
+  var subtitleEl = document.querySelector('[data-subtitle]');
+  var checksEl = document.querySelector('[data-checks]');
+  var fpsEl = document.querySelector('[data-fps]');
+  var fpCountEl = document.querySelector('[data-fpcount]');
+  var scoreEl = document.querySelector('[data-score]');
+  var barsEl = document.querySelector('[data-bars]');
+  var verdictEl = document.querySelector('[data-verdict]');
+  var inventoryEl = document.querySelector('[data-inventory]');
+  var runtimeEl = document.querySelector('[data-runtime]');
+  var envEl = document.querySelector('[data-env]');
+  var vpWidthEl = document.querySelector('[data-vpwidth]');
+  var openEl = document.querySelector('[data-open]');
+  var progressEl = document.querySelector('[data-progress]');
+  var stageEl = document.querySelector('[data-stage]');
+
+  var results = {};
+  var current = null;
+  var runToken = 0;
+  var frameErrors = [];
+
+  var reduceMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var hoverMq = window.matchMedia('(hover: hover)');
+  var fineMq = window.matchMedia('(pointer: fine)');
+
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  /* ---------------- environment ---------------- */
+  function renderEnv() {
+    var env = [
+      ['reduce motion', reduceMq.matches],
+      ['hover: hover', hoverMq.matches],
+      ['pointer: fine', fineMq.matches]
+    ];
+    envEl.innerHTML = env.map(function (pair) {
+      return '<span>' + pair[0] + ' — <b class="' + (pair[1] ? 'on' : 'off') + '">' + (pair[1] ? 'yes' : 'no') + '</b></span>';
+    }).join('') + '<span>viewport — <b>' + window.innerWidth + 'px</b></span>';
+  }
+
+  /* ---------------- rail ---------------- */
+  function renderList() {
+    listEl.innerHTML = PATTERNS.map(function (p, i) {
+      var r = results[p.id];
+      return '<li><a href="#' + p.id + '" data-id="' + p.id + '">' +
+        '<span class="n">0' + (i + 1) + ' · tier ' + p.tier + '</span>' +
+        '<span class="t">' + p.title + '</span>' +
+        '<span class="dot" data-s="' + (r ? r.status : 'idle') + '"></span>' +
+        '</a></li>';
+    }).join('');
+  }
+
+  /* ---------------- viewport presets (width set directly: never transitioned) ---------------- */
+  var VPS = { desktop: null, tablet: 834, mobile: 390 };
+  function setViewport(name) {
+    document.querySelectorAll('[data-vp]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.vp === name));
+    });
+    var w = VPS[name];
+    stageEl.style.width = w ? w + 'px' : '100%';
+    stageEl.style.maxWidth = '100%';
+    updateWidth();
+  }
+  function updateWidth() {
+    vpWidthEl.textContent = Math.round(stageEl.getBoundingClientRect().width) + 'px';
+  }
+
+  /* ---------------- loading ---------------- */
+  function loadFrame(url) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function onload() {
+        if (done) return;
+        done = true;
+        frame.removeEventListener('load', onload);
+        resolve();
+      }
+      frame.addEventListener('load', onload);
+      frame.src = url;
+      setTimeout(onload, 8000); // guard: a stuck CDN must not freeze the lab
+    });
+  }
+
+  /* ---------------- static checks over the real source ---------------- */
+  function sourceChecks(src, checks) {
+    function add(name, status, evidence) { checks.push({ name: name, status: status, evidence: evidence }); }
+
+    add('Motion inventory declared', /MOTION INVENTORY/i.test(src) ? 'pass' : 'fail',
+      /MOTION INVENTORY/i.test(src) ? 'MOTION INVENTORY comment present' : 'no inventory comment found');
+
+    add('Reduced-motion branch', /prefers-reduced-motion:\s*reduce/.test(src) ? 'pass' : 'fail',
+      /prefers-reduced-motion:\s*reduce/.test(src) ? 'media query present' : 'missing prefers-reduced-motion: reduce');
+
+    // The token layer is invariant; the values belong to the project (see references/corpus.md).
+    var hasTokens = /--ease-[a-z-]*\s*:/.test(src) || /ease:\s*'(expo|power|back|elastic)/.test(src);
+    var starterValues = /--ease-out:cubic-bezier\(\.16,1,\.3,1\)/.test(src);
+    add('Easing centralized as tokens', hasTokens ? 'pass' : 'warn',
+      hasTokens
+        ? (starterValues ? 'token layer present, starter values' : 'token layer present, project-specific values')
+        : 'easing is inline: no token layer');
+
+    var remoteFont = /@font-face|fonts\.googleapis|fonts\.gstatic/.test(src);
+    add('No remote fonts', remoteFont ? 'fail' : 'pass', remoteFont ? 'remote font reference found' : 'system stacks only');
+
+    add('Idempotent script guard', /window\.__ewm\w+\s*===\s*1/.test(src) ? 'pass' : 'warn',
+      /window\.__ewm\w+\s*===\s*1/.test(src) ? 'version stamp present' : 'no window.__ewm* guard');
+
+    add('No local asset dependency', /(src|href)="(?!https:|#|\.\.\/)[^"]*\.(png|jpe?g|webp|svg|woff2?|css)"/.test(src) ? 'fail' : 'pass',
+      'self-contained: only CDN libraries, no sidecar files');
+
+    // Syntax of every inline script block.
+    var blocks = [];
+    var re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    var m;
+    while ((m = re.exec(src))) blocks.push(m[1]);
+    var syntax = blocks.map(function (body) {
+      try { new Function(body); return true; } catch (e) { return e.message; }
+    });
+    var bad = syntax.filter(function (s) { return s !== true; });
+    add('Inline JS parses', bad.length ? 'fail' : 'pass',
+      blocks.length + ' block(s)' + (bad.length ? ' — ' + bad[0] : ' — no syntax error'));
+  }
+
+  /* ---------------- CSSOM checks inside the frame ---------------- */
+  function cssomChecks(doc, src, checks) {
+    function add(name, status, evidence) { checks.push({ name: name, status: status, evidence: evidence }); }
+
+    var layoutTransitions = [];
+    var hiddenStates = [];
+
+    function walk(rules) {
+      for (var i = 0; i < rules.length; i++) {
+        var rule = rules[i];
+        if (rule.cssRules && rule.cssRules.length) walk(rule.cssRules);
+        var st = rule.style;
+        if (!st) continue;
+
+        var decl = st.transitionProperty || st.transition || '';
+        if (decl) {
+          decl.split(',').forEach(function (part) {
+            var prop = part.trim().split(/\s+/)[0];
+            if (prop && LAYOUTISH.test(prop)) layoutTransitions.push((rule.selectorText || '(keyframe)') + ' → ' + prop);
+          });
+        }
+        if (st.opacity === '0' || st.opacity === '0.0') {
+          if (rule.selectorText) hiddenStates.push(rule.selectorText);
+        }
+      }
+    }
+
+    var sheets = doc.styleSheets;
+    for (var s = 0; s < sheets.length; s++) {
+      try { walk(sheets[s].cssRules); } catch (e) { /* cross-origin sheet */ }
+    }
+
+    add('Only compositor properties transitioned', layoutTransitions.length ? 'fail' : 'pass',
+      layoutTransitions.length ? layoutTransitions.slice(0, 3).join(' · ') : layoutTransitions.length + ' layout transitions in CSSOM');
+
+    // Which classes does the script add? A hidden start state is safe only when scoped to one of them.
+    var jsClasses = [];
+    var clsRe = /classList\.(?:add|toggle)\(\s*'([^'\s]+)'/g;
+    var cm;
+    while ((cm = clsRe.exec(src))) if (jsClasses.indexOf(cm[1]) === -1) jsClasses.push(cm[1]);
+
+    // A hidden state is safe when its selector mentions a JS class, or when some rule that adds a JS class
+    // reveals the same element (e.g. `.nav-open .overlay-foot{opacity:1}` revealing `.overlay-foot`).
+    var srcLines = src.split('\n');
+    function scoped(sel) {
+      if (jsClasses.some(function (c) { return sel.indexOf(c) !== -1; })) return true;
+      var parts = sel.split(',').map(function (p) { return p.trim(); });
+      var leaf = parts[parts.length - 1].split(/\s+/).pop();
+      if (!leaf) return false;
+      return srcLines.some(function (line) {
+        if (line.indexOf(leaf) === -1) return false;
+        if (!jsClasses.some(function (c) { return line.indexOf(c) !== -1; })) return false;
+        var m = line.match(/opacity\s*:\s*([\d.]+)/);
+        return !!m && parseFloat(m[1]) > 0;
+      });
+    }
+
+    var unscoped = hiddenStates.filter(function (sel) { return !scoped(sel); });
+
+    add('Hidden start states scoped to a JS class', unscoped.length ? 'warn' : 'pass',
+      hiddenStates.length === 0 ? 'no opacity:0 rule in stylesheets'
+        : (unscoped.length ? (hiddenStates.length - unscoped.length) + '/' + hiddenStates.length + ' scoped · review: ' + unscoped.slice(0, 2).join(', ')
+                           : hiddenStates.length + '/' + hiddenStates.length + ' scoped to ' + jsClasses.slice(0, 3).join(', ')));
+  }
+
+  /* ---------------- runtime checks inside the frame ---------------- */
+  function runtimeChecks(doc, win, src, checks, errors) {
+    function add(name, status, evidence) { checks.push({ name: name, status: status, evidence: evidence }); }
+
+    // JS may stamp flags on <html> or on <body>: 04 uses body.js-single, 03 uses body.nav-open.
+    var htmlClass = [(doc.documentElement.className || ''), (doc.body ? doc.body.className : '')]
+      .join(' ').replace(/\s+/g, ' ').trim();
+    var globals = {
+      gsap: typeof win.gsap, ScrollTrigger: typeof win.ScrollTrigger,
+      Lenis: typeof win.Lenis, Hls: typeof win.Hls
+    };
+
+    var animated = {};
+    (doc.getAnimations ? doc.getAnimations() : []).forEach(function (a) {
+      var eff = a.effect;
+      if (!eff || !eff.getKeyframes) return;
+      eff.getKeyframes().forEach(function (kf) {
+        Object.keys(kf).forEach(function (k) {
+          if (['offset', 'computedOffset', 'easing', 'composite'].indexOf(k) === -1) animated[k] = true;
+        });
+      });
+    });
+    var running = Object.keys(animated);
+    var offenders = running.filter(function (p) { return LAYOUTISH.test(p); });
+
+    add('Running animations are compositor-only', offenders.length ? 'fail' : 'pass',
+      running.length ? (offenders.length ? offenders.join(', ') : running.join(', ')) : 'none running at sample time');
+
+    add('No console/exceptions captured', errors.length ? 'fail' : 'pass',
+      errors.length ? errors.slice(0, 2).join(' | ') : 'clean after load (post-load capture)');
+
+    var ios = doc.querySelectorAll('.pin-spacer').length;
+    var runtime = {
+      htmlClass: htmlClass || '(none)',
+      expectedClass: null,
+      gsap: globals.gsap, ScrollTrigger: globals.ScrollTrigger, Lenis: globals.Lenis, Hls: globals.Hls,
+      runningAnimations: running.length,
+      scrollTriggerPins: ios,
+      elements: doc.querySelectorAll('*').length
+    };
+
+    return { runtime: runtime, htmlClass: htmlClass };
+  }
+
+  /* ---------------- fingerprint detection (separate axis, never scored) ---------------- */
+  function fingerprintChecks(src) {
+    var fp = [];
+    function note(name, why) { fp.push({ name: name, why: why }); }
+
+    if (/--ease-out:cubic-bezier\(\.16,1,\.3,1\)/.test(src) || /cubic-bezier\(\.33,0,\.2,1\)/.test(src)) {
+      note('Reference-site easing values (`.16,1,.3,1` / `.33,0,.2,1`)',
+        'No pair of the 8 sampled sites shares a curve. Keep the token layer, replace the numbers.');
+    }
+    if (/992px[\s\S]{0,60}hover[\s\S]{0,40}pointer[\s\S]{0,40}fine/.test(src)) {
+      note('Full-experience gate: width + hover + pointer',
+        'Only 1 of 8 sites gates its whole experience this way; 7 of 8 degrade per feature.');
+    }
+    if (/localStorage[\s\S]{0,80}(mode|MODE)/.test(src)) {
+      note('Immersive mode persisted in localStorage',
+        'Seen in the reference site only. No other sampled site persists a heavy mode.');
+    }
+    if (/PRELOAD_GATE_MS\s*=\s*3000/.test(src) || /JOB_TIMEOUT_MS\s*=\s*8000/.test(src)) {
+      note('Video pipeline constants 3s / 8s / 3 retries',
+        'Those are the reference decoder\'s tuned values, not measurements of your network. Justify or re-tune.');
+    }
+    if (/timeScale\s*\(\s*0?\.75\s*\)/.test(src)) {
+      note('Global timeScale() slowdown',
+        'One studio shapes pacing globally this way; elsewhere pacing comes from per-tween durations.');
+    }
+    if (/gsap\.defaults\s*\(/.test(src)) {
+      note('House ease set through gsap.defaults()',
+        'A single-site idiom. Fine as a choice; do not present it as the project\'s only vocabulary.');
+    }
+    return fp;
+  }
+
+  /* ---------------- audit one pattern ---------------- */
+  async function audit(pattern, token) {
+    var url = ASSETS + pattern.id + '.html';
+    var checks = [];
+    var errors = [];
+
+    veil.hidden = false;
+    inventoryEl.textContent = '—';
+
+    var src = '';
+    try { src = await (await fetch(url)).text(); }
+    catch (e) { checks.push({ name: 'Source readable', status: 'fail', evidence: String(e.message) }); }
+
+    await loadFrame(url);
+    if (token !== runToken) return null;
+
+    var win = frame.contentWindow;
+    var doc = frame.contentDocument;
+
+    // Errors are captured from here on: the lab cannot patch the frame before its first script runs.
+    win.addEventListener('error', function (e) { errors.push(e.message || 'error'); });
+    var originalError = win.console.error;
+    win.console.error = function () {
+      errors.push(Array.prototype.join.call(arguments, ' ').slice(0, 140));
+      originalError.apply(win.console, arguments);
+    };
+
+    await sleep(1100);
+
+    sourceChecks(src, checks);
+    cssomChecks(doc, src, checks);
+    var rt = runtimeChecks(doc, win, src, checks, errors);
+
+    // Branch actually active in this environment. Flags may live on <html>, <body> or a local element (06 stamps
+    // its stage), so look for the class anywhere in the frame instead of assuming a host element.
+    var expect = pattern.expects;
+    var matchEl = expect.cls ? doc.querySelector('.' + expect.cls) : null;
+    var hasExpected = !!matchEl;
+    if (expect.interactive) {
+      checks.push({
+        name: 'Active branch: ' + expect.cls, status: 'manual',
+        evidence: 'interaction-gated (' + expect.why + ') — open it standalone and click'
+      });
+    } else {
+      checks.push({
+        name: 'Active branch: ' + expect.cls, status: hasExpected ? 'pass' : 'warn',
+        evidence: hasExpected
+          ? 'class "' + expect.cls + '" present on <' + matchEl.tagName.toLowerCase() + '>'
+          : 'branch off: ' + expect.why + ' · html="' + (rt.htmlClass || '(empty)') + '" — your environment; this audit covers the fallback branch only'
+      });
+    }
+
+    // Manual items the browser cannot prove for us.
+    [
+      ['Reduced-motion branch behaves', 'Set OS "reduce motion" (or DevTools › Rendering › prefers-reduced-motion) and reload: no movement, all content visible.'],
+      ['Pointer gates behave', 'Touch device or coarse pointer: immersive layer off, native cursor kept.'],
+      ['Keyboard path works', 'Tab through: focus visible, Escape closes overlays, arrows move the carousel.'],
+      ['60fps on target hardware', 'DevTools › Performance: no long task over 50ms during the transition.']
+    ].forEach(function (pair) {
+      checks.push({ name: pair[0], status: 'manual', evidence: pair[1] });
+    });
+
+    // Inventory: the declared table, verbatim from the file.
+    var inv = src.match(/MOTION INVENTORY([\s\S]*?)-->/);
+    inventoryEl.textContent = inv ? inv[1].trim() : 'no MOTION INVENTORY block';
+
+    var score = tally(checks);
+    var status = score.fail ? 'fail' : (score.warn ? 'warn' : 'pass');
+    var fingerprints = fingerprintChecks(src);
+
+    var result = { id: pattern.id, checks: checks, score: score, status: status, runtime: rt.runtime, fingerprints: fingerprints };
+    results[pattern.id] = result;
+    return result;
+  }
+
+  function tally(checks) {
+    return checks.reduce(function (acc, c) {
+      acc[c.status] = (acc[c.status] || 0) + 1;
+      return acc;
+    }, { pass: 0, warn: 0, fail: 0, manual: 0 });
+  }
+
+  /* ---------------- render ---------------- */
+  function render(result, pattern) {
+    if (!result) return;
+    var sc = result.score;
+    var total = sc.pass + sc.warn + sc.fail;
+    scoreEl.textContent = total ? Math.round((sc.pass / total) * 100) + '%' : '—';
+    scoreEl.style.color = sc.fail ? 'var(--bad)' : (sc.warn ? 'var(--warn)' : 'var(--ok)');
+
+    barsEl.innerHTML = [
+      ['pass', sc.pass], ['warn', sc.warn], ['fail', sc.fail], ['manual', sc.manual]
+    ].map(function (pair) {
+      return '<span class="bar"><i class="dot" data-s="' + pair[0] + '"></i>' + pair[1] + ' ' + pair[0] + '</span>';
+    }).join('');
+
+    verdictEl.textContent = sc.fail ? 'contract violation found'
+      : sc.warn ? 'passes with something to review'
+      : 'contract holds';
+
+    checksEl.innerHTML = result.checks.map(function (c) {
+      return '<tr><td>' + c.name + '</td>' +
+        '<td><span class="tag" data-s="' + c.status + '">' + c.status + '</span></td>' +
+        '<td class="ev">' + escapeHtml(c.evidence) + '</td></tr>';
+    }).join('');
+
+    runtimeEl.textContent = JSON.stringify(result.runtime, null, 2);
+
+    var fps = result.fingerprints || [];
+    fpsEl.innerHTML = fps.length
+      ? fps.map(function (f) {
+          return '<tr><td>' + escapeHtml(f.name) + '</td><td class="ev">' + escapeHtml(f.why) + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="2" class="ev">none — no reference-site decision detected</td></tr>';
+    fpCountEl.innerHTML = fps.length
+      ? '<span class="tag" data-s="info">' + fps.length + ' observed</span>'
+      : '<span class="tag" data-s="pass">clean</span>';
+    subtitleEl.textContent = 'tier ' + pattern.tier + ' · ' + pattern.id;
+    titleEl.textContent = pattern.title;
+    openEl.href = ASSETS + pattern.id + '.html';
+    renderList();
+    veil.hidden = true;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+
+  /* ---------------- flow ---------------- */
+  async function select(id) {
+    var pattern = PATTERNS.filter(function (p) { return p.id === id; })[0];
+    if (!pattern) return;
+    current = pattern;
+    var token = ++runToken;
+    checksEl.innerHTML = '<tr><td colspan="3" class="ev">loading ' + pattern.id + '…</td></tr>';
+    scoreEl.textContent = '—';
+    barsEl.innerHTML = '';
+    verdictEl.textContent = '';
+    runtimeEl.textContent = '—';
+    fpsEl.innerHTML = '<tr><td colspan="2" class="ev">—</td></tr>';
+    fpCountEl.textContent = '—';
+    titleEl.textContent = pattern.title;
+    subtitleEl.textContent = 'tier ' + pattern.tier + ' · auditing…';
+    openEl.href = ASSETS + pattern.id + '.html';
+    document.querySelectorAll('[data-id]').forEach(function (a) {
+      a.setAttribute('aria-current', String(a.dataset.id === id));
+    });
+    updateWidth();
+
+    var result = await audit(pattern, token);
+    if (result && token === runToken) render(result, pattern);
+  }
+
+  listEl.addEventListener('click', function (e) {
+    var link = e.target.closest('a[data-id]');
+    if (!link) return;
+    e.preventDefault();
+    select(link.dataset.id);
+    history.replaceState(null, '', '#' + link.dataset.id);
+  });
+
+  document.querySelectorAll('[data-vp]').forEach(function (btn) {
+    btn.addEventListener('click', function () { setViewport(btn.dataset.vp); });
+  });
+
+  document.querySelector('[data-audit-all]').addEventListener('click', async function () {
+    var btn = this;
+    btn.disabled = true;
+    for (var i = 0; i < PATTERNS.length; i++) {
+      progressEl.textContent = 'auditing ' + (i + 1) + '/' + PATTERNS.length + ' · ' + PATTERNS[i].id;
+      await select(PATTERNS[i].id);
+    }
+    progressEl.textContent = 'all 7 audited';
+    btn.disabled = false;
+    renderList();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.target.closest('input,textarea')) return;
+    var n = Number(e.key);
+    if (n >= 1 && n <= 7) select(PATTERNS[n - 1].id);
+    if (e.key === 'd') setViewport('desktop');
+    if (e.key === 't') setViewport('tablet');
+    if (e.key === 'm') setViewport('mobile');
+  });
+
+  new ResizeObserver(updateWidth).observe(stageEl);
+  [reduceMq, hoverMq, fineMq].forEach(function (mq) {
+    mq.addEventListener('change', function () { renderEnv(); if (current) select(current.id); });
+  });
+  window.addEventListener('resize', renderEnv);
+
+  renderEnv();
+  renderList();
+  setViewport('desktop');
+
+  var start = (location.hash || '').replace('#', '') || PATTERNS[0].id;
+  select(start);
+})();
+</script>
+</body>
+</html>
