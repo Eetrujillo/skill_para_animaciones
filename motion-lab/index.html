@@ -238,6 +238,16 @@
         <tbody data-sat></tbody>
       </table>
 
+      <div class="fp-head">
+        <h2>Fluidity — frame cost during interaction</h2>
+        <span class="label" data-costscore>—</span>
+      </div>
+      <p class="label" style="margin:0">LoAF entries (frame &gt; 50ms) recorded through a PerformanceObserver while a scroll pulse runs across the frame.</p>
+      <table>
+        <thead><tr><th style="width:40%">Measure</th><th style="width:16%">Measured</th><th>Budget</th><th style="width:10%">Status</th></tr></thead>
+        <tbody data-cost></tbody>
+      </table>
+
       <div class="two">
         <div class="panel">
           <h2>Declared motion inventory</h2>
@@ -282,6 +292,8 @@
   var fpCountEl = document.querySelector('[data-fpcount]');
   var satEl = document.querySelector('[data-sat]');
   var satScoreEl = document.querySelector('[data-satscore]');
+  var costEl = document.querySelector('[data-cost]');
+  var costScoreEl = document.querySelector('[data-costscore]');
   var scoreEl = document.querySelector('[data-score]');
   var barsEl = document.querySelector('[data-bars]');
   var verdictEl = document.querySelector('[data-verdict]');
@@ -729,6 +741,73 @@
     return rows;
   }
 
+  /* ------- fluidity probe: LoAF entries during a scripted interaction, purely in-page ------- */
+  var COST = { loaf: 3, worstFrameMs: 100 };
+
+  async function fluidityProbe(win) {
+    var out = { loafCount: 0, worstFrameMs: 0, scriptedMs: 0 };
+    if (!win || !win.document || !win.PerformanceObserver) { out.error = 'no PerformanceObserver'; return out; }
+
+    try {
+      var obs = new win.PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (e) {
+          out.loafCount++;
+          if (e.duration > out.worstFrameMs) out.worstFrameMs = Math.round(e.duration);
+        });
+      });
+      obs.observe({ type: 'long-animation-frame', buffered: false });
+
+      // Scroll pulse: drive the smooth-scroll path with real work, then stop observing.
+      var start = win.scrollY;
+      var t0 = win.performance.now();
+      for (var s = 0; s < 6; s++) {
+        win.scrollTo(0, start + (s + 1) * 500);
+        await sleep(140);
+      }
+      win.scrollTo(0, start);
+      await sleep(400);
+      out.scriptedMs = Math.round(win.performance.now() - t0);
+
+      obs.disconnect();
+    } catch (e) {
+      out.error = String(e && e.message || e).slice(0, 60);
+    }
+    return out;
+  }
+
+  function gradeFluidity(f) {
+    if (f.error) {
+      return [{ name: 'LoAF observer', measured: 'unavailable: ' + f.error, budget: '—', status: 'manual' }];
+    }
+    var supported = false;
+    try { supported = win.PerformanceObserver && win.PerformanceObserver.supportedTypes &&
+      win.PerformanceObserver.supportedTypes.indexOf('long-animation-frame') !== -1; } catch (e) {}
+    if (f.loafCount === 0 && !supported) {
+      // Headless builds may not emit LoAF entries at all. An unverified zero is not a pass.
+      return [{ name: 'LoAF unsupported in this browser', measured: '—', budget: 'verify in a real browser', status: 'manual' }];
+    }
+    var rows = [];
+    rows.push({
+      name: 'Long animation frames (> 50 ms) during scroll pulse',
+      measured: String(f.loafCount),
+      budget: '≤ ' + COST.loaf,
+      status: f.loafCount <= COST.loaf ? 'pass' : 'fail'
+    });
+    rows.push({
+      name: 'Worst frame duration',
+      measured: f.worstFrameMs + ' ms',
+      budget: '≤ ' + COST.worstFrameMs + ' ms',
+      status: f.worstFrameMs <= COST.worstFrameMs ? 'pass' : 'fail'
+    });
+    rows.push({
+      name: 'Scroll pulse wall time',
+      measured: f.scriptedMs + ' ms',
+      budget: 'informational',
+      status: 'info'
+    });
+    return rows;
+  }
+
   /* ---------------- audit one pattern ---------------- */
   async function audit(pattern, token) {
     var stamp = 'r' + Date.now() + Math.round(Math.random() * 1e5);
@@ -762,6 +841,8 @@
     var sat = sample
       ? await finishProbe(sample, src)
       : { peakAnimations: 0, settleMs: 0, movingAreaPct: 0, infiniteLoops: 0, pauseControl: false, scrollSettleMs: null, scrollDeclaredMs: null, pins: 0, promoted: 0 };
+
+    // Fluidity runs after the entrance settles; the probe generates the load it measures.
 
     sourceChecks(src, checks);
     cssomChecks(doc, src, checks);
@@ -804,7 +885,15 @@
     var status = score.fail ? 'fail' : (score.warn ? 'warn' : 'pass');
     var fingerprints = fingerprintChecks(src);
 
-    var result = { id: pattern.id, checks: checks, score: score, status: status, runtime: rt.runtime, fingerprints: fingerprints, saturation: gradeSaturation(sat), satRaw: sat };
+    var result = { id: pattern.id, checks: checks, score: score, status: status, runtime: rt.runtime, fingerprints: fingerprints, saturation: gradeSaturation(sat), satRaw: sat, fluidity: null };
+
+    // The probe needs the settled frame; run it last so its own event Pressure is what is measured.
+    try {
+      var f = await fluidityProbe(frame.contentWindow);
+      result.fluidity = gradeFluidity(f);
+    } catch (e) {
+      result.fluidity = [{ name: 'Fluidity probe', measured: 'error: ' + String(e && e.message || e).slice(0, 50), budget: '—', status: 'manual' }];
+    }
     results[pattern.id] = result;
     return result;
   }
@@ -863,6 +952,18 @@
     satScoreEl.innerHTML = over
       ? '<span class="tag" data-s="fail">' + over + ' over budget</span>'
       : '<span class="tag" data-s="pass">within budget</span>';
+
+    var flu = result.fluidity || [];
+    var fluOver = flu.filter(function (r) { return r.status === 'fail'; }).length;
+    costEl.innerHTML = flu.map(function (r) {
+      return '<tr><td>' + escapeHtml(r.name) + '</td>' +
+        '<td class="ev">' + escapeHtml(r.measured) + '</td>' +
+        '<td class="ev">' + escapeHtml(r.budget) + '</td>' +
+        '<td><span class="tag" data-s="' + r.status + '">' + (r.status === 'fail' ? 'over' : (r.status === 'manual' ? 'n/a' : 'ok')) + '</span></td></tr>';
+    }).join('');
+    costScoreEl.innerHTML = fluOver
+      ? '<span class="tag" data-s="fail">' + fluOver + ' over</span>'
+      : '<span class="tag" data-s="pass">smooth</span>';
     subtitleEl.textContent = 'tier ' + pattern.tier + ' · ' + pattern.id;
     titleEl.textContent = pattern.title;
     openEl.href = ASSETS + pattern.id + '.html';
@@ -891,6 +992,8 @@
     fpCountEl.textContent = '—';
     satEl.innerHTML = '<tr><td colspan="4" class="ev">—</td></tr>';
     satScoreEl.textContent = '—';
+    costEl.innerHTML = '<tr><td colspan="4" class="ev">—</td></tr>';
+    costScoreEl.textContent = '—';
     titleEl.textContent = pattern.title;
     subtitleEl.textContent = 'tier ' + pattern.tier + ' · auditing…';
     openEl.href = ASSETS + pattern.id + '.html';
