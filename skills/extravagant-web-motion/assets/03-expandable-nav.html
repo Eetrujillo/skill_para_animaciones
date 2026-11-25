@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>03 · Expandable Navigation — extravagant-web-motion</title>
+<!--
+  MOTION INVENTORY — pattern 03 (expandable navigation)
+  element         | trigger        | property            | duration        | easing
+  -----------------|----------------|---------------------|-----------------|----------------------------
+  .overlay        | open / close   | clip-path inset()   | 600ms           | cubic-bezier(.16,1,.3,1) out
+  .row > span     | open           | translateY(110%→0)  | 600ms           | out, 60ms per-row stagger
+  .row > span     | hover / focus  | translateX(.8em)    | 200ms           | out
+  .row (siblings) | hover          | opacity .55         | 200ms           | out
+  .bar            | open           | transform rotate    | 200ms           | out
+  TIER 1 — CSS only, on purpose. Nav motion must survive a stalled main thread while the next page loads,
+  so it stays on the compositor. No GSAP in this file: that is the two-speed architecture rule, not laziness.
+  DEGRADATION — reduced motion: no stagger, overlay appears instantly. Keyboard: Escape closes, focus is
+  trapped inside the overlay and restored to the trigger. No JS: links remain usable anchors.
+-->
+<style>
+  :root{
+    --bg:#0a0a0b; --surface:#141416; --fg:#f5f3ef; --dim:#8b8b87; --line:#26262a;
+    --accent:#d7ff3e;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --ease-in:cubic-bezier(.33,0,.2,1);
+    --dur-micro:200ms; --dur-enter:600ms; --dur-hero:1000ms;
+    --gutter:clamp(20px,4vw,64px);
+    --font-display:Georgia,"Times New Roman",serif;
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0}
+  html{background:var(--bg)}
+  body{
+    background:var(--bg); color:var(--fg); font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased; min-height:100svh;
+  }
+  h1,h2,p{margin:0}
+  .label{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--dim);
+  }
+
+  /* ---------- page behind the menu ---------- */
+  .page{padding:var(--gutter); display:grid; gap:clamp(32px,8vh,96px); min-height:100svh}
+  header.top{display:flex; justify-content:space-between; align-items:center; gap:16px}
+  .brand{
+    font-family:var(--font-display); font-size:clamp(1.2rem,2vw,1.5rem);
+    letter-spacing:-.01em; text-decoration:none; color:var(--fg);
+  }
+  .trigger{
+    display:inline-flex; align-items:center; gap:10px;
+    background:none; border:1px solid var(--line); border-radius:2px;
+    color:var(--fg); padding:10px 14px; cursor:pointer;
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    transition:border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+  }
+  .trigger:hover,.trigger:focus-visible{border-color:var(--accent); color:var(--accent); outline:none}
+  .bar{display:block; width:18px; height:1px; background:currentColor; position:relative; transition:transform var(--dur-micro) var(--ease-out)}
+  .bar::after{content:""; position:absolute; inset:0; background:currentColor; transform:translateY(5px); transition:transform var(--dur-micro) var(--ease-out)}
+  .nav-open .bar{transform:rotate(45deg)}
+  .nav-open .bar::after{transform:rotate(-90deg)}
+
+  .hero h1{
+    font-family:var(--font-display); font-weight:400;
+    font-size:clamp(2.6rem,9vw,7rem); line-height:.95; letter-spacing:-.02em; max-width:18ch;
+  }
+  .hero p{color:var(--dim); max-width:46ch; line-height:1.6; margin-top:clamp(16px,3vh,28px)}
+  .grid{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .tile{aspect-ratio:4/3; border:1px solid var(--line); background:var(--surface); padding:16px; display:flex; align-items:flex-end}
+
+  /* ---------- overlay menu: expands with clip-path ---------- */
+  .overlay{
+    position:fixed; inset:0; z-index:50;
+    background:var(--bg);
+    display:flex; flex-direction:column; justify-content:center;
+    padding:var(--gutter);
+    clip-path:inset(0 0 100% 0);
+    visibility:hidden;
+    transition:clip-path var(--dur-enter) var(--ease-out), visibility 0s linear var(--dur-enter);
+  }
+  .nav-open .overlay{
+    clip-path:inset(0 0 0 0);
+    visibility:visible;
+    transition:clip-path var(--dur-enter) var(--ease-out), visibility 0s;
+  }
+  .overlay-top{
+    position:absolute; top:var(--gutter); left:var(--gutter); right:var(--gutter);
+    display:flex; justify-content:space-between; align-items:center; gap:16px;
+  }
+  .menu{display:grid; gap:clamp(4px,1vh,12px); list-style:none; margin:0; padding:0}
+  .row{overflow:hidden; display:block}
+  .row > a{
+    display:flex; align-items:baseline; gap:clamp(12px,2vw,28px);
+    text-decoration:none; color:var(--fg);
+    font-family:var(--font-display); font-weight:400;
+    font-size:clamp(2.2rem,8vw,5.5rem); line-height:1.06; letter-spacing:-.02em;
+    transform:translateY(110%);
+    transition:transform var(--dur-enter) var(--ease-out), color var(--dur-micro) var(--ease-out), opacity var(--dur-micro) var(--ease-out);
+    will-change:transform;
+  }
+  .row > a .idx{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; color:var(--dim);
+    transform:translateY(-.6em);
+  }
+  /* Baseline hover motion stays on CSS transitions: no main-thread dependency. */
+  @media (hover:hover) and (pointer:fine){
+    .row > a:hover,.row > a:focus-visible{transform:translateY(0) translateX(.8em); color:var(--accent); outline:none}
+    .menu:hover .row > a:not(:hover){opacity:.55}
+  }
+  .nav-open .row > a{transform:translateY(0)}
+  .overlay-foot{
+    position:absolute; bottom:var(--gutter); left:var(--gutter); right:var(--gutter);
+    display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    opacity:0; transform:translateY(12px);
+    transition:opacity var(--dur-enter) var(--ease-out) .12s, transform var(--dur-enter) var(--ease-out) .12s;
+  }
+  .nav-open .overlay-foot{opacity:1; transform:translateY(0)}
+
+  body.nav-open{overflow:hidden}
+
+  /* Stagger: per-row delay, written as custom properties so timing is tunable in one place. */
+  .nav-open .row:nth-child(1) > a{transition-delay:.06s}
+  .nav-open .row:nth-child(2) > a{transition-delay:.12s}
+  .nav-open .row:nth-child(3) > a{transition-delay:.18s}
+  .nav-open .row:nth-child(4) > a{transition-delay:.24s}
+  .nav-open .row:nth-child(5) > a{transition-delay:.30s}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{
+      transition-duration:.01ms !important; animation-duration:.01ms !important;
+      transition-delay:0s !important; animation-iteration-count:1 !important;
+    }
+    .row > a{transform:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <a class="brand" href="#top">Halcyon Studio</a>
+    <button class="trigger" type="button" data-trigger aria-expanded="false" aria-controls="site-menu">
+      <span class="bar" aria-hidden="true"></span>
+      <span data-trigger-label>Menu</span>
+    </button>
+  </header>
+
+  <section class="hero">
+    <h1>A menu that arrives instead of appearing.</h1>
+    <p>Everything in the overlay is a transform. No library, no main thread, no jank when the next page starts loading.</p>
+  </section>
+
+  <div class="grid">
+    <div class="tile"><span class="label">Ponder — Identity</span></div>
+    <div class="tile"><span class="label">Cantor8 — Interface</span></div>
+    <div class="tile"><span class="label">Goom Gum — Motion</span></div>
+  </div>
+</div>
+
+<div class="overlay" id="site-menu" role="dialog" aria-modal="true" aria-label="Site menu" data-overlay>
+  <div class="overlay-top">
+    <span class="label">Index</span>
+    <button class="trigger" type="button" data-close>Close</button>
+  </div>
+
+  <nav>
+    <ul class="menu" data-menu>
+      <li class="row"><a href="#work"><span class="idx">01</span>Work</a></li>
+      <li class="row"><a href="#studio"><span class="idx">02</span>Studio</a></li>
+      <li class="row"><a href="#journal"><span class="idx">03</span>Journal</a></li>
+      <li class="row"><a href="#exhibitions"><span class="idx">04</span>Exhibitions</a></li>
+      <li class="row"><a href="#contact"><span class="idx">05</span>Contact</a></li>
+    </ul>
+  </nav>
+
+  <div class="overlay-foot">
+    <span class="label">Belgrade / New York</span>
+    <span class="label">hello@example.com</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  if (window.__ewmExpandableNav === 1) return;
+  window.__ewmExpandableNav = 1;
+
+  var trigger = document.querySelector('[data-trigger]');
+  var triggerLabel = document.querySelector('[data-trigger-label]');
+  var overlay = document.querySelector('[data-overlay]');
+  var closeBtn = overlay.querySelector('[data-close]');
+  var menu = document.querySelector('[data-menu]');
+  var links = Array.prototype.slice.call(menu.querySelectorAll('a'));
+  var body = document.body;
+  var lastFocus = null;
+
+  function focusables() {
+    return [closeBtn].concat(links);
+  }
+
+  function open() {
+    lastFocus = document.activeElement;
+    body.classList.add('nav-open');
+    document.documentElement.classList.add('nav-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    triggerLabel.textContent = 'Close';
+    // Wait for the panel to be visible before moving focus.
+    requestAnimationFrame(function () { links[0].focus({ preventScroll: true }); });
+  }
+
+  function close() {
+    body.classList.remove('nav-open');
+    document.documentElement.classList.remove('nav-open');
+    trigger.setAttribute('aria-expanded', 'false');
+    triggerLabel.textContent = 'Menu';
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+  }
+
+  function isOpen() { return body.classList.contains('nav-open'); }
+
+  trigger.addEventListener('click', function () { isOpen() ? close() : open(); });
+  closeBtn.addEventListener('click', close);
+
+  links.forEach(function (link) {
+    link.addEventListener('click', close);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key !== 'Tab') return;
+    var items = focusables();
+    var first = items[0];
+    var last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  // Keep keyboard users inside the overlay when content beneath is focusable.
+  overlay.addEventListener('focusout', function (e) {
+    if (!isOpen()) return;
+    if (e.relatedTarget && overlay.contains(e.relatedTarget)) return;
+    if (e.relatedTarget === trigger) return;
+  });
+})();
+</script>
+</body>
+</html>

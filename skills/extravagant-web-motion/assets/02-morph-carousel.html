@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>02 · Fullscreen Morph Carousel — extravagant-web-motion</title>
+<!--
+  MOTION INVENTORY — pattern 02 (fullscreen morph carousel)
+  element        | trigger              | property                        | duration | easing
+  ----------------|----------------------|---------------------------------|----------|-------------------------
+  .tile          | click / Enter        | x, y, scaleX, scaleY, opacity   | 1.0s     | expo.out (0.03s stagger)
+  .tile (return) | Escape / backdrop    | x, y, scaleX, scaleY, opacity   | 0.8s     | cubic-bezier(.33,0,.2,1) (ease-in)
+  .hud           | mode change          | opacity                          | 0.2s     | ease-out
+  TIER 3 — transform-only morph (FLIP by construction). No width/height animation, no geometry read during
+  the tween: grid geometry is computed on layout, then expressed as scale on a full-stage box.
+  EASING MAP — GSAP has no cubic-bezier() ease without CustomEase, so the CSS contract maps as:
+  expo.out (entry) and power2.in (exit) stand in for cubic-bezier(.16,1,.3,1) / (.33,0,.2,1).
+  OPTIONAL 3D — swap the tile element for a three.js plane with a distortion shader only when depth is the point.
+  DEGRADATION — reduced motion or coarse pointer: the immersive layer is not built; tiles are links with the same
+  content. Keyboard: arrows move the active index, Escape returns to the grid.
+-->
+<style>
+  :root{
+    --bg:#0a0a0b; --surface:#141416; --fg:#f5f3ef; --dim:#8b8b87; --line:#26262a;
+    --accent:#d7ff3e;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --ease-in:cubic-bezier(.33,0,.2,1);
+    --dur-micro:200ms; --dur-enter:600ms; --dur-hero:1000ms;
+    --gutter:clamp(20px,4vw,64px);
+    --font-display:Georgia,"Times New Roman",serif;
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg); font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  h1,h2,p{margin:0}
+  .label{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--dim);
+  }
+
+  .shell{
+    height:100svh; display:grid; grid-template-rows:auto 1fr auto;
+    padding:var(--gutter); gap:16px;
+  }
+  .top{display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap}
+  .top h1{font-family:var(--font-display); font-weight:400; font-size:clamp(1.4rem,2.6vw,2rem); letter-spacing:-.01em}
+
+  .stage{
+    position:relative; overflow:hidden; border-radius:2px;
+    background:var(--surface); border:1px solid var(--line);
+    min-height:0;
+  }
+  .note{
+    position:absolute; inset:0; display:grid; place-content:center; text-align:center;
+    padding:var(--gutter); gap:10px; z-index:0;
+  }
+  .note p{color:var(--dim); max-width:44ch; line-height:1.55; margin-inline:auto}
+
+  .tile{
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    transform-origin:0 0; will-change:transform, opacity;
+    display:flex; flex-direction:column; justify-content:space-between;
+    padding:clamp(14px,2vw,28px);
+    border:1px solid var(--line); border-radius:2px;
+    cursor:pointer; overflow:hidden; background:var(--surface);
+    transition:border-color var(--dur-micro) var(--ease-out);
+  }
+  .tile:hover,.tile:focus-visible{border-color:var(--accent); outline:none}
+  .tile .glyph{
+    position:absolute; right:-.06em; bottom:-.28em;
+    font-family:var(--font-display); font-size:min(38vw,420px); line-height:.8;
+    color:rgba(245,243,239,.05); pointer-events:none; user-select:none;
+  }
+  .tile .meta{display:flex; justify-content:space-between; gap:12px; position:relative}
+  .tile .name{
+    font-family:var(--font-display); font-size:clamp(1.3rem,2.4vw,2rem);
+    line-height:1; letter-spacing:-.01em; position:relative;
+  }
+  .tile[data-tone="a"]{background:linear-gradient(150deg,#101012 20%,#1d2410)}
+  .tile[data-tone="b"]{background:linear-gradient(150deg,#101012 20%,#241018)}
+  .tile[data-tone="c"]{background:linear-gradient(150deg,#101012 20%,#101a24)}
+  .tile[data-tone="d"]{background:linear-gradient(150deg,#101012 20%,#221a0c)}
+  .tile[data-tone="e"]{background:linear-gradient(150deg,#101012 20%,#1a1024)}
+  .tile[data-tone="f"]{background:linear-gradient(150deg,#101012 20%,#0c2220)}
+
+  .hud{
+    display:flex; justify-content:space-between; align-items:center; gap:16px;
+    min-height:28px; flex-wrap:wrap;
+  }
+  .hud .controls{display:flex; gap:8px; align-items:center}
+  button{
+    background:none; color:var(--fg); border:1px solid var(--line);
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    padding:8px 12px; cursor:pointer; border-radius:2px;
+    transition:border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+  }
+  button:hover,button:focus-visible{border-color:var(--accent); color:var(--accent); outline:none}
+  button[disabled]{opacity:.35; cursor:not-allowed}
+
+  /* Immersive layer only exists when the gate passes. */
+  html:not(.immersive) .tile{cursor:pointer}
+  html:not(.immersive) .stage{
+    overflow:auto; display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));
+    padding:12px; align-content:start;
+  }
+  html:not(.immersive) .tile{position:relative; width:auto; height:auto; aspect-ratio:4/3; min-height:160px}
+  html:not(.immersive) .note{display:none}
+  html:not(.immersive) .controls{display:none}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{
+      animation-duration:.01ms !important; transition-duration:.01ms !important;
+      animation-iteration-count:1 !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top">
+    <h1>Fullscreen morph carousel</h1>
+    <span class="label">Pattern 02 — transform-only</span>
+  </div>
+
+  <div class="stage" data-stage>
+    <div class="note">
+      <span class="label">Tier 3 — FLIP by construction</span>
+      <p>Each tile is a full-stage box scaled down into a grid cell, so going fullscreen is a transform tween, not a layout rewrite.</p>
+    </div>
+    <article class="tile" data-tone="a" data-name="Ponder" tabindex="0" role="button" aria-label="Open Ponder">
+      <span class="glyph">01</span>
+      <div class="meta"><span class="label">Identity</span><span class="label">2026</span></div>
+      <span class="name">Ponder</span>
+    </article>
+    <article class="tile" data-tone="b" data-name="Cantor8" tabindex="0" role="button" aria-label="Open Cantor8">
+      <span class="glyph">02</span>
+      <div class="meta"><span class="label">Interface</span><span class="label">2026</span></div>
+      <span class="name">Cantor8</span>
+    </article>
+    <article class="tile" data-tone="c" data-name="Goom Gum" tabindex="0" role="button" aria-label="Open Goom Gum">
+      <span class="glyph">03</span>
+      <div class="meta"><span class="label">Motion</span><span class="label">2025</span></div>
+      <span class="name">Goom Gum</span>
+    </article>
+    <article class="tile" data-tone="d" data-name="OXI Instruments" tabindex="0" role="button" aria-label="Open OXI Instruments">
+      <span class="glyph">04</span>
+      <div class="meta"><span class="label">Product</span><span class="label">2025</span></div>
+      <span class="name">OXI</span>
+    </article>
+    <article class="tile" data-tone="e" data-name="Monolith Studio" tabindex="0" role="button" aria-label="Open Monolith Studio">
+      <span class="glyph">05</span>
+      <div class="meta"><span class="label">Editorial</span><span class="label">2024</span></div>
+      <span class="name">Monolith</span>
+    </article>
+    <article class="tile" data-tone="f" data-name="Hungry Tiger" tabindex="0" role="button" aria-label="Open Hungry Tiger">
+      <span class="glyph">06</span>
+      <div class="meta"><span class="label">Hospitality</span><span class="label">2025</span></div>
+      <span class="name">Hungry Tiger</span>
+    </article>
+  </div>
+
+  <div class="hud">
+    <span class="label" data-status>Grid — click a tile or press Enter</span>
+    <div class="controls">
+      <button type="button" data-prev aria-label="Previous">← Prev</button>
+      <button type="button" data-next aria-label="Next">Next →</button>
+      <button type="button" data-close aria-label="Close fullscreen">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  if (window.__ewmMorphCarousel === 1) return;
+  window.__ewmMorphCarousel = 1;
+
+  var GATE = '(min-width: 992px) and (hover: hover) and (pointer: fine)';
+  var REDUCE = '(prefers-reduced-motion: reduce)';
+
+  var stage = document.querySelector('[data-stage]');
+  var tiles = gsap.utils.toArray('.tile');
+  var status = document.querySelector('[data-status]');
+  var btnPrev = document.querySelector('[data-prev]');
+  var btnNext = document.querySelector('[data-next]');
+  var btnClose = document.querySelector('[data-close]');
+
+  var state = { mode: 'grid', active: 0 };
+  var enabled = false;
+
+  function columns(count, width) {
+    if (width < 640) return 1;
+    if (width < 1100) return 2;
+    return 3;
+  }
+
+  // Geometry is read on layout only (clientWidth/Height exclude the border), never inside a tween.
+  function geometry() {
+    var w = stage.clientWidth;
+    var h = stage.clientHeight;
+    var cols = columns(tiles.length, w);
+    var rows = Math.ceil(tiles.length / cols);
+    var gap = 12;
+    var cw = (w - gap * (cols - 1)) / cols;
+    var ch = (h - gap * (rows - 1)) / rows;
+    return {
+      width: w, height: h, cols: cols, rows: rows, cw: cw, ch: ch, gap: gap,
+      sx: cw / w, sy: ch / h
+    };
+  }
+
+  function setStatus() {
+    status.textContent = state.mode === 'grid'
+      ? 'Grid — click a tile or press Enter'
+      : 'Fullscreen — ' + (state.active + 1) + ' / ' + tiles.length + ' — arrows to move, Escape to close';
+  }
+
+  function toGrid(duration) {
+    var g = geometry();
+    state.mode = 'grid';
+    tiles.forEach(function (tile, i) {
+      var c = i % g.cols;
+      var r = Math.floor(i / g.cols);
+      gsap.to(tile, {
+        x: c * (g.cw + g.gap),
+        y: r * (g.ch + g.gap),
+        scaleX: g.sx,
+        scaleY: g.sy,
+        opacity: 1,
+        zIndex: 1,
+        duration: duration,
+        ease: 'power2.in',
+        overwrite: 'auto'
+      });
+      tile.style.pointerEvents = 'auto';
+      tile.setAttribute('aria-hidden', 'false');
+      tile.setAttribute('tabindex', '0');
+    });
+    document.documentElement.classList.remove('is-fullscreen');
+    setStatus();
+  }
+
+  function toFullscreen(index, duration) {
+    state.mode = 'fullscreen';
+    state.active = index;
+    tiles.forEach(function (tile, i) {
+      var active = i === index;
+      gsap.to(tile, {
+        x: 0, y: 0, scaleX: 1, scaleY: 1,
+        opacity: active ? 1 : 0,
+        zIndex: active ? 10 : 2,
+        duration: duration,
+        ease: 'expo.out',
+        delay: active ? 0 : Math.min(0.09, Math.abs(i - index) * 0.03),
+        overwrite: 'auto',
+        onComplete: function () {
+          tile.style.pointerEvents = active ? 'auto' : 'none';
+          tile.setAttribute('aria-hidden', active ? 'false' : 'true');
+          tile.setAttribute('tabindex', active ? '0' : '-1');
+        }
+      });
+    });
+    document.documentElement.classList.add('is-fullscreen');
+    setStatus();
+  }
+
+  function enable() {
+    if (enabled) return;
+    enabled = true;
+    document.documentElement.classList.add('immersive');
+    tiles.forEach(function (tile) {
+      tile.style.transform = 'none';
+    });
+    // Grid geometry is read once per layout, never inside the tween.
+    gsap.set(tiles, { transformOrigin: '0 0' });
+    toGrid(0);
+  }
+
+  function disable() {
+    if (!enabled) return;
+    enabled = false;
+    document.documentElement.classList.remove('immersive', 'is-fullscreen');
+    tiles.forEach(function (tile) {
+      gsap.killTweensOf(tile);
+      gsap.set(tile, { clearProps: 'transform,opacity,zIndex' });
+      tile.style.pointerEvents = '';
+      tile.removeAttribute('aria-hidden');
+      tile.setAttribute('tabindex', '0');
+    });
+    state.mode = 'grid';
+  }
+
+  tiles.forEach(function (tile, i) {
+    tile.addEventListener('click', function () {
+      if (!enabled) return;
+      state.mode === 'fullscreen' && state.active === i ? toGrid(0.8) : toFullscreen(i, 1);
+    });
+    tile.addEventListener('keydown', function (e) {
+      if (!enabled) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toFullscreen(i, 1); }
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!enabled) return;
+    if (e.key === 'Escape' && state.mode === 'fullscreen') { toGrid(0.8); return; }
+    if (state.mode !== 'fullscreen') return;
+    if (e.key === 'ArrowRight') { toFullscreen((state.active + 1) % tiles.length, 0.6); }
+    if (e.key === 'ArrowLeft') { toFullscreen((state.active - 1 + tiles.length) % tiles.length, 0.6); }
+  });
+
+  btnPrev.addEventListener('click', function () {
+    if (state.mode !== 'fullscreen') return;
+    toFullscreen((state.active - 1 + tiles.length) % tiles.length, 0.6);
+  });
+  btnNext.addEventListener('click', function () {
+    if (state.mode !== 'fullscreen') return;
+    toFullscreen((state.active + 1) % tiles.length, 0.6);
+  });
+  btnClose.addEventListener('click', function () {
+    if (state.mode === 'fullscreen') toGrid(0.8);
+  });
+
+  var gateMq = window.matchMedia(GATE);
+  var reduceMq = window.matchMedia(REDUCE);
+
+  function apply() {
+    if (gateMq.matches && !reduceMq.matches) { enable(); return; }
+    disable();
+    if (!reduceMq.matches) setStatus();
+  }
+
+  apply();
+  gateMq.addEventListener('change', apply);
+  reduceMq.addEventListener('change', apply);
+
+  var rt;
+  window.addEventListener('resize', function () {
+    if (!enabled) return;
+    clearTimeout(rt);
+    rt = setTimeout(function () {
+      state.mode === 'fullscreen' ? toFullscreen(state.active, 0) : toGrid(0);
+    }, 120);
+  });
+})();
+</script>
+</body>
+</html>

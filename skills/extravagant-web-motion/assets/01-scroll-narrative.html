@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>01 · Scroll Narrative — extravagant-web-motion</title>
+<!--
+  MOTION INVENTORY — pattern 01 (scroll narrative)
+  element              | trigger            | property          | duration | easing
+  ---------------------|--------------------|-------------------|----------|---------------------------
+  .line > span (hero)  | load               | yPercent 110 → 0  | 1.0s     | expo.out, 0.06s stagger
+  .layer (3 layers)    | scroll (sticky)    | yPercent, scale   | scrub    | none (scroll-linked)
+  .scene-caption       | scroll             | opacity, y        | scrub    | none
+  .strip-track         | scroll + pin       | x                 | scrub    | none
+  .reveal .line > span | viewport (once)    | yPercent 110 → 0  | 0.6s     | expo.out
+  TIER 2 — GSAP + ScrollTrigger, Lenis synced to gsap.ticker.
+  DEGRADATION — reduced motion: no Lenis, no pin, no scrub, everything visible. < 992px: strip becomes a
+  native snap scroller and the pin is never created.
+-->
+<style>
+  :root{
+    --bg:#0a0a0b; --surface:#141416; --fg:#f5f3ef; --dim:#8b8b87; --line:#26262a;
+    --accent:#d7ff3e;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --ease-in:cubic-bezier(.33,0,.2,1);
+    --dur-micro:200ms; --dur-enter:600ms; --dur-hero:1000ms;
+    --gutter:clamp(20px,4vw,64px);
+    --font-display:Georgia,"Times New Roman",serif;
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  h1,h2,h3,p,figure{margin:0}
+  .label{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--dim);
+  }
+
+  /* ---------- hero ---------- */
+  .hero{
+    min-height:100svh; padding:var(--gutter);
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .hero-top{display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap}
+  .hero h1{
+    font-family:var(--font-display); font-weight:400;
+    font-size:clamp(3rem,11vw,9rem); line-height:.92; letter-spacing:-.02em;
+    padding-block:clamp(24px,6vh,80px);
+  }
+  .line{display:block; overflow:hidden; padding-bottom:.06em}
+  .line > span{display:block}
+  .hero-foot{display:flex; justify-content:space-between; align-items:end; gap:24px; flex-wrap:wrap}
+  .scroll-cue{display:flex; align-items:center; gap:10px}
+  .scroll-cue i{
+    display:block; width:1px; height:34px; background:var(--line); position:relative; overflow:hidden;
+  }
+  .scroll-cue i::after{
+    content:""; position:absolute; inset:0; background:var(--accent);
+    animation:cue 2.2s var(--ease-out) infinite;
+  }
+  @keyframes cue{
+    0%{transform:translateY(-100%)} 60%,100%{transform:translateY(100%)}
+  }
+
+  /* ---------- sticky parallax scene (no ScrollTrigger pin: sticky is compositor-cheap) ---------- */
+  .scene{position:relative; height:280vh}
+  .scene-stage{
+    position:sticky; top:0; height:100svh; overflow:hidden;
+    display:grid; place-items:center;
+  }
+  .layer{position:absolute; inset:-8% -4%; will-change:transform}
+  .layer-a{
+    background:
+      radial-gradient(60% 50% at 30% 35%, rgba(215,255,62,.18), transparent 70%),
+      radial-gradient(50% 60% at 75% 65%, rgba(120,90,255,.22), transparent 70%);
+  }
+  .layer-b{
+    background:
+      radial-gradient(38% 34% at 62% 42%, rgba(255,110,90,.28), transparent 72%),
+      radial-gradient(42% 40% at 22% 72%, rgba(60,200,255,.18), transparent 72%);
+    mix-blend-mode:screen;
+  }
+  .layer-c{
+    display:grid; place-items:center;
+    font-family:var(--font-display); font-size:clamp(4rem,16vw,13rem); line-height:.85;
+    color:transparent; -webkit-text-stroke:1px rgba(245,243,239,.22);
+    text-align:center; letter-spacing:-.03em;
+  }
+  .scene-caption{
+    position:absolute; bottom:var(--gutter); left:var(--gutter);
+    max-width:34ch; display:grid; gap:10px;
+  }
+  .scene-caption p{font-size:clamp(.95rem,1.6vw,1.15rem); line-height:1.5; color:var(--fg)}
+
+  /* ---------- horizontal strip ---------- */
+  .strip{position:relative; overflow:hidden; padding-block:clamp(48px,10vh,140px)}
+  .strip-head{
+    padding-inline:var(--gutter); display:flex; justify-content:space-between;
+    align-items:baseline; gap:24px; margin-bottom:clamp(24px,4vh,48px);
+  }
+  .strip-track{display:flex; gap:20px; padding-inline:var(--gutter); will-change:transform}
+  .card{
+    flex:0 0 clamp(240px,30vw,380px); aspect-ratio:3/4;
+    background:var(--surface); border:1px solid var(--line);
+    display:flex; flex-direction:column; justify-content:space-between;
+    padding:20px; position:relative; overflow:hidden;
+  }
+  .card::after{
+    content:""; position:absolute; inset:auto -30% -40% auto; width:70%; aspect-ratio:1;
+    border-radius:50%; background:radial-gradient(circle, rgba(215,255,62,.16), transparent 70%);
+  }
+  .card .num{font-family:var(--font-display); font-size:clamp(2rem,4vw,3rem); line-height:1}
+
+  /* ---------- outro ---------- */
+  .outro{padding:clamp(80px,18vh,220px) var(--gutter); display:grid; gap:clamp(24px,5vh,56px)}
+  .outro h2{
+    font-family:var(--font-display); font-weight:400;
+    font-size:clamp(2.2rem,7vw,5.5rem); line-height:1; letter-spacing:-.02em; max-width:22ch;
+  }
+  .outro-grid{display:grid; gap:24px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .outro-grid p{color:var(--dim); line-height:1.6; font-size:.95rem}
+  footer{
+    padding:var(--gutter); border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+
+  /* ---------- mobile: no pin, native snap scroller ---------- */
+  @media (max-width:991px){
+    .strip{overflow:visible}
+    .strip-track{
+      overflow-x:auto; scroll-snap-type:x mandatory;
+      scrollbar-width:none; padding-bottom:8px;
+    }
+    .strip-track::-webkit-scrollbar{display:none}
+    .card{scroll-snap-align:start; flex-basis:78vw}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{
+      animation-duration:.01ms !important; animation-iteration-count:1 !important;
+      transition-duration:.01ms !important;
+    }
+    .scene{height:auto}
+    .scene-stage{position:relative; height:70svh}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-top">
+    <span class="label">Halcyon Studio</span>
+    <span class="label">Scroll narrative / 01</span>
+  </div>
+
+  <h1>
+    <span class="line"><span>Motion</span></span>
+    <span class="line"><span>is the</span></span>
+    <span class="line"><span>message</span></span>
+  </h1>
+
+  <div class="hero-foot">
+    <p class="label" style="max-width:30ch">Interfaces that move at the speed of reading.</p>
+    <span class="scroll-cue label"><i></i>Scroll</span>
+  </div>
+</header>
+
+<section class="scene" aria-label="Layered depth scene">
+  <div class="scene-stage">
+    <div class="layer layer-a" data-depth="0.18"></div>
+    <div class="layer layer-b" data-depth="0.34"></div>
+    <div class="layer layer-c" data-depth="0.6">DEPTH<br>IS A<br>RHYTHM</div>
+    <div class="scene-caption">
+      <span class="label">Layered depth</span>
+      <p>Three planes, one sticky stage. Nothing is pinned by script: the browser keeps it on the compositor.</p>
+    </div>
+  </div>
+</section>
+
+<section class="strip" aria-label="Selected work">
+  <div class="strip-head">
+    <h2 class="label">Selected work — 2024 / 2026</h2>
+    <span class="label" data-strip-count>05</span>
+  </div>
+  <div class="strip-track" data-strip-track>
+    <article class="card"><span class="label">01 / Identity</span><span class="num">Ponder</span></article>
+    <article class="card"><span class="label">02 / Interface</span><span class="num">Cantor8</span></article>
+    <article class="card"><span class="label">03 / Motion</span><span class="num">Goom Gum</span></article>
+    <article class="card"><span class="label">04 / Product</span><span class="num">OXI</span></article>
+    <article class="card"><span class="label">05 / Editorial</span><span class="num">Monolith</span></article>
+  </div>
+</section>
+
+<section class="outro">
+  <h2 class="reveal">
+    <span class="line"><span>Cinematic is a budget,</span></span>
+    <span class="line"><span>not a pile of effects.</span></span>
+  </h2>
+  <div class="outro-grid reveal">
+    <p>Every moving property here is a transform or an opacity. No layout is recalculated while you scroll.</p>
+    <p>Two curves, three durations, one accent. The variety comes from the stagger, not from the vocabulary.</p>
+    <p>Disable JavaScript and the page still reads: the hidden start states are applied by script, never by CSS.</p>
+  </div>
+</section>
+
+<footer>
+  <span class="label">extravagant-web-motion — pattern 01</span>
+  <span class="label">Tier 2 — GSAP + ScrollTrigger</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.23/dist/lenis.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  if (window.__ewmScrollNarrative === 1) return;   // idempotent: never double-bind
+  window.__ewmScrollNarrative = 1;
+
+  var reduceMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var ctx = null;
+  var mm = null;
+
+  function build() {
+    ctx = gsap.context(function () {
+      var lenis = new Lenis({
+        duration: 1.1,
+        easing: function (t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); }
+      });
+
+      // One scroll loop only: Lenis drives ScrollTrigger through the GSAP ticker.
+      lenis.on('scroll', ScrollTrigger.update);
+      gsap.ticker.add(function (time) { lenis.raf(time * 1000); });
+      gsap.ticker.lagSmoothing(0);
+
+      // Hero lines: hidden state applied here, so a failed script means visible text.
+      gsap.set('.hero .line > span', { yPercent: 110 });
+      gsap.to('.hero .line > span', {
+        yPercent: 0, duration: 1, ease: 'expo.out', stagger: 0.06, delay: 0.15
+      });
+
+      // Depth: scroll-linked, no timeline length.
+      gsap.utils.toArray('.scene .layer').forEach(function (layer) {
+        var depth = parseFloat(layer.dataset.depth) || 0.2;
+        gsap.to(layer, {
+          yPercent: -14 * depth * 4,
+          scale: 1 + depth * 0.35,
+          ease: 'none',
+          scrollTrigger: { trigger: '.scene', start: 'top bottom', end: 'bottom top', scrub: true }
+        });
+      });
+
+      // Caption settles as the scene passes.
+      gsap.fromTo('.scene-caption', { opacity: 0, y: 24 }, {
+        opacity: 1, y: 0, ease: 'none',
+        scrollTrigger: { trigger: '.scene', start: 'top 60%', end: 'top 20%', scrub: true }
+      });
+
+      // Reveals below the fold, once each.
+      gsap.utils.toArray('.reveal').forEach(function (block) {
+        var inner = block.querySelectorAll('.line > span');
+        if (inner.length) gsap.set(inner, { yPercent: 110 });
+        else gsap.set(block, { opacity: 0, y: 28 });
+        ScrollTrigger.create({
+          trigger: block,
+          start: 'top 82%',
+          once: true,
+          onEnter: function () {
+            gsap.to(inner.length ? inner : block, {
+              yPercent: 0, opacity: 1, y: 0,
+              duration: 0.6, ease: 'expo.out', stagger: 0.06
+            });
+          }
+        });
+      });
+
+      // Horizontal strip: pinned translate on desktop only.
+      mm = gsap.matchMedia();
+      mm.add('(min-width: 992px)', function () {
+        var track = document.querySelector('[data-strip-track]');
+        var distance = function () { return Math.max(0, track.scrollWidth - window.innerWidth + 64); };
+        var tween = gsap.to(track, {
+          x: function () { return -distance(); },
+          ease: 'none',
+          scrollTrigger: {
+            trigger: '.strip',
+            start: 'top top',
+            end: function () { return '+=' + (distance() + window.innerHeight * 0.4); },
+            pin: true,
+            scrub: 0.6,
+            invalidateOnRefresh: true,
+            anticipatePin: 1
+          }
+        });
+        return function () { tween.scrollTrigger && tween.scrollTrigger.kill(); tween.kill(); };
+      });
+    });
+  }
+
+  function destroy() {
+    if (mm) { mm.revert(); mm = null; }
+    if (ctx) { ctx.revert(); ctx = null; }
+    // Reduced-motion branch: force the readable end state instead of a cleared transform.
+    document.querySelectorAll('.hero .line > span, .reveal .line > span').forEach(function (el) {
+      el.style.transform = 'none';
+    });
+    document.querySelectorAll('.reveal').forEach(function (el) {
+      el.style.opacity = '1';
+    });
+  }
+
+  function apply() {
+    if (reduceMq.matches) { destroy(); return; }
+    destroy();
+    build();
+  }
+
+  apply();
+  reduceMq.addEventListener('change', apply);
+})();
+</script>
+</body>
+</html>
