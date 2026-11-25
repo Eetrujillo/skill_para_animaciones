@@ -26,6 +26,10 @@ Not for: CSS micro-interactions (`web-animation-design`), UX structure (`gentle-
 - Automatic or repeating motion over 5s needs a visible pause control (WCAG 2.2.2); hover and scroll-into-view count as automatic; interaction-triggered motion stays disableable (2.3.3).
 - Declare a saturation budget before designing: one focal motion per viewport, ≤1 loop with control, ≤1 scrubbed scene, entrance settle ≤1.2s. `restraint.md` numbers are ours, not standards.
 - State the tier you chose; when 60fps cannot be evidenced, ship one tier lower.
+- Batch DOM reads, then writes; never interleave geometry reads with style writes in one frame (forced layout per read).
+- Genuinely off-main-thread: null-transform hacks (`translate3d(0,0,0)`) are dead — use `will-change` in the 200ms window and remove it after.
+- Blur is the expensive filter: no animated blur over a large area, backdrop-filter on ≤3 elements per viewport, never over a playing video.
+- Keep the motion layer lean: ≤365KB compressed JS for motion, total page ≤2.5MB; `decoding="async"` on animated images; off-screen sections under `content-visibility: auto` paired with `contain-intrinsic-size`.
 
 ## Decision Gates
 
@@ -38,7 +42,7 @@ Not for: CSS micro-interactions (`web-animation-design`), UX structure (`gentle-
 
 ## Execution Steps
 
-1. Read `corpus.md`, `restraint.md`, then copy a spec from `pattern-library.md` — never the look.
+1. Read `corpus.md`, `restraint.md`, `fluidity.md`, then copy a spec from `pattern-library.md` — never the look.
 2. Write the reduced-motion and mobile branches first (`degradation.md`).
 3. Apply the token block, implement inside the declared properties and durations, stay inside the saturation budget.
 4. Verify: compositor-only, no layout shift from hidden states, stagger 40–90ms, keyboard and touch paths, no remote fonts.
@@ -52,6 +56,7 @@ Return: files touched; the motion inventory table; tier with its one-line reason
 
 - `references/corpus.md` — eight verified sites: invariants, fingerprints, where they fail.
 - `references/restraint.md` — citable limits and the saturation budgets we chose.
+- `references/fluidity.md` — frame budgets, cost drivers, layer-promotion folklore, weight budgets.
 - `references/pattern-library.md` — seven patterns: trigger, properties, budget, asset, variants.
 - `references/degradation.md` — four reduced-motion forms, degradation ladder, no-JS, keyboard.
 - `references/craft-lessons.md` — craft lessons from the reference site.
