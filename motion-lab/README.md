@@ -16,6 +16,9 @@ A test bench for the `extravagant-web-motion` skill. It loads each demo asset in
    through a `MutationObserver` on `style` attributes; CSS animations come from `getAnimations()`. Both sources
    are unioned. Scroll used to be measured by pushing the frame; the declared Lenis duration is now checked too,
    because a programmatic push cannot see what the tween would really do.
+4. **Fluidity** (from `references/fluidity.md`): long-animation-frame entries (`PerformanceObserver('long-animation-frame')`)
+   recorded during a scripted scroll pulse across the frame, plus the worst frame duration. In a browser that
+   cannot emit LoAF entries the row reports `manual` — an unverified zero is never scored as a pass.
 
 The audit reads the real files: CSSOM rules, `document.getAnimations()` keyframes, and the source text. It is not a
 screenshot gallery.

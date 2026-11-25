@@ -22,8 +22,9 @@ compositor-only rules, per-feature degradation, and the distinction between inva
 cd motion-lab && node serve.mjs        # → http://127.0.0.1:4815/index.html
 ```
 
-Two scored axes and one informational: contract checks (scored), saturation budgets (scored, from `restraint.md`),
-and fingerprints (unscored). Serve over HTTP — `file://` forbids same-origin iframe introspection.
+Two scored axes and two informational: contract checks (scored), saturation budgets (scored, from `restraint.md`),
+fluidity frame cost (from `fluidity.md`), and fingerprints (unscored). Serve over HTTP — `file://` forbids
+same-origin iframe introspection.
 `motion-lab/README.md` lists every check and, more importantly, what the lab cannot test.
 
 ## Evidence
