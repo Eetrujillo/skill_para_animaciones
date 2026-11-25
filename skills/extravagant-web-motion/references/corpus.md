@@ -39,6 +39,28 @@ result as "competitive practice 2026", never as law. Re-sample before treating a
 - **197 does not call `document.startViewTransition` itself**: it renders a framework `ViewTransition` component and styles it with `::view-transition-*` CSS. The navigation transition is still CSS-owned, not GSAP-owned.
 - **No site among f, g, b, c uses a `hover:hover` + `pointer:fine` + persisted-mode gate.** Combined with round I, site 0 is one of eight — its triple gate is site-specific.
 
+## Where these sites fail their own users
+
+The corpus celebrates these sites; it must also record the bill. Evidence against the aesthetic this skill was built
+from:
+
+- **Greenspector** audited [10 Awwwards-nominated sites](https://greenspector.com/en/resources/blog/analysis_sites_nominated_mobile_excellence_awwwards/):
+  one at **more than 400 HTTP requests and 12 MB**, one with "perpetual movements (without the possibility of control)",
+  one with "about 40 accessibility errors".
+- **NN/g**: scroll-triggered reveals cost patience — "even one extra second is enough for users to notice a delay" —
+  and motion should serve communication "rather than to induce delight or entertain users".
+- **Tatiana Mac**, writing from lived BPPV: animation "especially when overused and abused, can make people very ill".
+- **WebAIM**: animated scrolling beyond ~250 ms is a vestibular trigger, and scrolljacking is "highly likely" to cause
+  symptoms. Two of the eight catalogued sites ship smooth-scroll engines; those sit above the threshold.
+
+Consequences this skill accepts, with the numbers in `restraint.md`:
+
+1. Award-site motion is **not** automatically good. It is the aesthetic under audit, not the target.
+2. Auto-repeating motion without a pause control is a WCAG 2.2.2 failure regardless of how well it is crafted.
+3. A page measuring 12 MB of assets cannot be defended as "cinematic", only as expensive.
+4. The strongest review signal is a reviewer noticing the animation at all (Carbon: if it is frequently noticed,
+   remove or minimise it).
+
 ## What survives as a rule
 
 1. **Handle reduced motion explicitly** — 7/8, and the one that ignores it (f: 700vh scroll-scrub, loader, zero RM) is a defect to avoid, not a style choice.
