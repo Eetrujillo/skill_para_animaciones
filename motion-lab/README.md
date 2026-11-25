@@ -1,7 +1,7 @@
 # Motion Lab
 
 A test bench for the `extravagant-web-motion` skill. It loads each demo asset in an iframe and audits it on
-**two independent axes**:
+**three independent axes**:
 
 1. **Contract** (scored): motion inventory declared, reduced-motion branch, named easing layer, no remote fonts,
    idempotent script guard, no sidecar assets, inline JS parses, only compositor properties transitioned, hidden
@@ -9,7 +9,13 @@ A test bench for the `extravagant-web-motion` skill. It loads each demo asset in
    branch is actually active in your environment.
 2. **Fingerprints** (unscored): decisions that belong to one reference site and must not harden into rules —
    its easing values, a full-experience width+pointer gate, a persisted immersive mode, its video pipeline
-   constants. These are listed, never penalised: the demos are deliberately one instantiation.
+   constants. Listed, never penalised: the demos are deliberately one instantiation.
+3. **Saturation** (measured against declared budgets in `references/restraint.md`): peak animated elements in a
+   100 ms window, entrance settle time, moving area at peak, infinite loops and their pause control, smooth-scroll
+   settle, pinned scenes, promotion candidates. GSAP is invisible to the Web Animations API, so it is counted
+   through a `MutationObserver` on `style` attributes; CSS animations come from `getAnimations()`. Both sources
+   are unioned. Scroll used to be measured by pushing the frame; the declared Lenis duration is now checked too,
+   because a programmatic push cannot see what the tween would really do.
 
 The audit reads the real files: CSSOM rules, `document.getAnimations()` keyframes, and the source text. It is not a
 screenshot gallery.
@@ -43,12 +49,10 @@ the iframe for real, so the demos' media queries respond — that part is a genu
 
 ## What it cannot test
 
-- **Reduced motion**: depends on your OS or DevTools › Rendering › `prefers-reduced-motion`. The lab reports the
-  environment instead of faking it.
-- **Pointer capability**: `hover:hover` / `pointer:fine` cannot be emulated from a page, so gated branches stay off
-  and the audit says so explicitly.
-- **Keyboard and 60fps**: listed as manual checks with instructions.
+- **Whether the budgets are right**: the saturation numbers in `references/restraint.md` are this skill's chosen
+  policy, not a standard. No source publishes a concurrency, layer, or moving-area limit; each budget says so.
 - **Whether it feels good**: nobody here watches animations. Everything is read from code.
+- Reduced motion, pointer capability, keyboard and 60fps remain manual checks, listed with instructions in the UI.
 
 ## Limits of the detectors
 
