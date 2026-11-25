@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>05 · Kinetic Typography — extravagant-web-motion</title>
+<!--
+  MOTION INVENTORY — pattern 05 (kinetic typography)
+  element            | trigger        | property                | duration | easing
+  --------------------|----------------|-------------------------|----------|----------------------
+  .line .w (words)   | load           | yPercent 110→0, opacity | 1.0s     | expo.out, 0.05s stagger
+  .marquee-track     | always         | translateX 0→-50%       | 22s loop | linear (loop, not UI)
+  .statement .w      | scroll scrub   | opacity, y              | scrub    | none, 0.08s stagger
+  .rule              | scroll scrub   | scaleX 0→1              | scrub    | none
+  .band (hover)      | hover          | animation-play-state    | —        | —
+  TIER 1 + 2 — split text and loops are CSS/transform work; GSAP only for the scroll-linked sequence.
+  Budget: ≤ 400 generated spans, split once, `aria-label` on the container and `aria-hidden` on generated spans.
+  DEGRADATION — reduced motion: no split, no loop, text renders as authored. No JS: original text stays in place.
+-->
+<style>
+  :root{
+    --bg:#0a0a0b; --surface:#141416; --fg:#f5f3ef; --dim:#8b8b87; --line:#26262a;
+    --accent:#d7ff3e;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --ease-in:cubic-bezier(.33,0,.2,1);
+    --dur-micro:200ms; --dur-enter:600ms; --dur-hero:1000ms;
+    --gutter:clamp(20px,4vw,64px);
+    --font-display:Georgia,"Times New Roman",serif;
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--fg); font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  h1,h2,p{margin:0}
+  .label{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--dim);
+  }
+
+  .hero{padding:var(--gutter); min-height:100svh; display:flex; flex-direction:column; justify-content:space-between; gap:48px}
+  .hero-top{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap}
+  .hero h1{
+    font-family:var(--font-display); font-weight:400;
+    font-size:clamp(2.8rem,12vw,10rem); line-height:.9; letter-spacing:-.03em;
+    padding-block:clamp(24px,6vh,72px);
+  }
+  .line{display:block; overflow:hidden; padding-bottom:.04em}
+  .w{display:inline-block; will-change:transform}
+  /* The hidden start state exists only once the script is known to run: never invisible in CSS alone. */
+  html.is-motion .hero h1 .w{transform:translateY(110%); opacity:0}
+
+  /* ---------- marquee band ---------- */
+  .band{
+    border-block:1px solid var(--line); padding-block:clamp(10px,1.6vh,18px);
+    overflow:hidden; position:relative;
+  }
+  .marquee-track{
+    display:flex; gap:clamp(20px,3vw,48px); width:max-content;
+    animation:marquee 22s linear infinite;
+    will-change:transform;
+  }
+  .marquee-track span{
+    font-family:var(--font-display); font-size:clamp(1.6rem,3.4vw,2.6rem);
+    line-height:1; white-space:nowrap; display:inline-flex; align-items:center; gap:clamp(20px,3vw,48px);
+  }
+  .marquee-track span::after{content:""; width:8px; height:8px; background:var(--accent); border-radius:50%}
+  .band:hover .marquee-track{animation-play-state:paused}
+  @keyframes marquee{
+    from{transform:translateX(0)} to{transform:translateX(-50%)}
+  }
+
+  /* ---------- scroll-linked statement ---------- */
+  .statement{padding:clamp(80px,18vh,200px) var(--gutter); display:grid; gap:clamp(20px,4vh,40px)}
+  .statement h2{
+    font-family:var(--font-display); font-weight:400;
+    font-size:clamp(1.8rem,5.4vw,4rem); line-height:1.12; letter-spacing:-.02em; max-width:26ch;
+  }
+  .statement .w{opacity:.12; will-change:opacity, transform}
+  .rule{height:1px; background:var(--accent); transform-origin:0 50%; transform:scaleX(0)}
+
+  .outro{padding:var(--gutter); display:grid; gap:12px; border-top:1px solid var(--line)}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{
+      animation-duration:.01ms !important; transition-duration:.01ms !important;
+      animation-iteration-count:1 !important;
+    }
+    .hero h1 .w{transform:none !important; opacity:1 !important}
+    .statement .w{opacity:1 !important; transform:none !important}
+    .rule{transform:scaleX(1)}
+    .marquee-track{animation:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-top">
+    <span class="label">Halcyon Studio</span>
+    <span class="label">Kinetic type / 05</span>
+  </div>
+
+  <h1 data-split="hero">
+    <span class="line">Motion is</span>
+    <span class="line">a decision,</span>
+    <span class="line">not a default</span>
+  </h1>
+
+  <p class="label" style="max-width:34ch">
+    Split once at load, animate the spans, keep the accessible name intact.
+  </p>
+</header>
+
+<div class="band" aria-hidden="true">
+  <div class="marquee-track" data-marquee>
+    <span>Art direction</span><span>Interfaces</span><span>Motion</span><span>3D &amp; WebGL</span><span>Type</span>
+    <span>Art direction</span><span>Interfaces</span><span>Motion</span><span>3D &amp; WebGL</span><span>Type</span>
+  </div>
+</div>
+
+<section class="statement">
+  <span class="label">Scroll-linked sequence</span>
+  <h2 data-split="statement">
+    Words arrive in the order a reader needs them, at the speed of the scroll, never all at once.
+  </h2>
+  <div class="rule" data-rule></div>
+</section>
+
+<footer class="outro">
+  <span class="label">Pattern 05 — split text, loop band, scroll sequence</span>
+  <span class="label">≤ 400 spans · split once · aria-label preserved</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  if (window.__ewmKineticType === 1) return;
+  window.__ewmKineticType = 1;
+
+  var reduceMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var ctx = null;
+
+  // Split once. The original string becomes the accessible name; spans are hidden from AT.
+  function splitLine(line) {
+    var text = line.textContent.replace(/\s+/g, ' ').trim();
+    var words = text.split(' ');
+    line.textContent = '';
+    words.forEach(function (word, i) {
+      var span = document.createElement('span');
+      span.className = 'w';
+      span.textContent = word;
+      span.setAttribute('aria-hidden', 'true');
+      line.appendChild(span);
+      if (i < words.length - 1) line.appendChild(document.createTextNode(' '));
+    });
+  }
+
+  function splitAll() {
+    document.querySelectorAll('[data-split]').forEach(function (root) {
+      if (root.dataset.splitDone === 'true') return;
+      var label = root.textContent.replace(/\s+/g, ' ').trim();
+      var lines = root.querySelectorAll('.line');
+      if (lines.length) {
+        lines.forEach(splitLine);
+      } else {
+        splitLine(root);
+      }
+      root.setAttribute('aria-label', label);
+      root.dataset.splitDone = 'true';
+    });
+  }
+
+  function build() {
+    ctx = gsap.context(function () {
+      document.documentElement.classList.add('is-motion');
+
+      var heroWords = gsap.utils.toArray('[data-split="hero"] .w');
+      gsap.to(heroWords, {
+        yPercent: 0, y: 0, opacity: 1, duration: 1, ease: 'expo.out', stagger: 0.05, delay: 0.1
+      });
+
+      var words = gsap.utils.toArray('[data-split="statement"] .w');
+      if (words.length) {
+        gsap.to(words, {
+          opacity: 1,
+          y: 0,
+          stagger: 0.08,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: '.statement',
+            start: 'top 75%',
+            end: 'bottom 55%',
+            scrub: 0.5
+          }
+        });
+      }
+
+      gsap.fromTo('[data-rule]', { scaleX: 0 }, {
+        scaleX: 1, ease: 'none',
+        scrollTrigger: { trigger: '.statement', start: 'top 70%', end: 'bottom 60%', scrub: true }
+      });
+    });
+  }
+
+  function destroy() {
+    if (ctx) { ctx.revert(); ctx = null; }
+    document.documentElement.classList.remove('is-motion');
+    gsap.set('[data-split] .w', { clearProps: 'all' });
+  }
+
+  function apply() {
+    splitAll();
+    if (reduceMq.matches) { destroy(); return; }
+    destroy();
+    build();
+  }
+
+  apply();
+  reduceMq.addEventListener('change', apply);
+})();
+</script>
+</body>
+</html>
