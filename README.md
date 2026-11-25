@@ -22,12 +22,13 @@ compositor-only rules, per-feature degradation, and the distinction between inva
 cd motion-lab && node serve.mjs        # → http://127.0.0.1:4815/index.html
 ```
 
-Two axes: contract checks (scored) and fingerprints (unscored, informational). Serve over HTTP — `file://` forbids
-same-origin iframe introspection. `motion-lab/README.md` lists every check and, more importantly, what the lab
-cannot test.
+Two scored axes and one informational: contract checks (scored), saturation budgets (scored, from `restraint.md`),
+and fingerprints (unscored). Serve over HTTP — `file://` forbids same-origin iframe introspection.
+`motion-lab/README.md` lists every check and, more importantly, what the lab cannot test.
 
 ## Evidence
 
 The patterns are not invented. `references/corpus.md` records eight sites with their stacks verified in live HTML,
 a falsification round over four more URLs, and an explicit list of the claims that did not survive it — plus what
-remains unverified.
+remains unverified. `references/restraint.md` separates citable limits (WCAG, WebAIM, Apple, Carbon, Material,
+web.dev) from the saturation budgets this skill chose for itself.
